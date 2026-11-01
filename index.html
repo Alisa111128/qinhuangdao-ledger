@@ -278,7 +278,7 @@ input[type=date]{-webkit-appearance:none;appearance:none}
   </div>
   <div class="money-cards">
     <div class="mc in"><div class="v" id="hIn">¥0</div><div class="l">营业额</div></div>
-    <div class="mc out"><div class="v" id="hOut">¥0</div><div class="l">成本+支出</div></div>
+    <div class="mc out"><div class="v" id="hOut">¥0</div><div class="l">总支出</div></div>
     <div class="mc pf"><div class="v" id="hPf">¥0</div><div class="l">净利</div></div>
   </div>
 </div>
@@ -724,29 +724,20 @@ function utilityRecorded(){
 
 /* ---------------- 顶部统计 ---------------- */
 function computeMonth(m){
-  let income=0, expense=0, purchase=0, refund=0, salesCount=0, soldCost=0;
+  let income=0, expense=0, purchase=0, refund=0, salesCount=0;
   S.records.forEach(r=>{
     if(!inMonth(r.time, m)) return;
-    if(r.type==='in'){
-      income += r.amount; salesCount++;
-      if(r.cost !== undefined && r.cost !== null) soldCost += r.cost;
-    }
+    if(r.type==='in'){ income += r.amount; salesCount++; }
     else if(r.type==='out'){
       expense += r.amount;
       if(r.cat==='purchase') purchase += r.amount;
     }
     else if(r.type==='refund'){ refund += r.amount; }
   });
-  // 卖货成本优先用卖出时逐单记的成本；没记过就按(进货支出−在库货值)兜底
-  let costUsed = soldCost;
-  if(costUsed === 0 && purchase > 0){
-    const ownValue = S.stock.filter(s=>s.status==='own').reduce((a,b)=>a+(b.cost||0),0);
-    costUsed = Math.max(0, purchase - ownValue);
-  }
-  const otherExpense = expense - purchase;
+  // 净利 = 营业额 − 退款 − 全部支出（进货当时就计入支出）
   return {
-    income, expense, purchase, refund, salesCount, soldCost: costUsed,
-    profit: income - refund - otherExpense - costUsed
+    income, expense, purchase, refund, salesCount,
+    profit: income - refund - expense
   };
 }
 
@@ -754,7 +745,7 @@ function renderHeader(){
   const m = currentMonth();
   const c = computeMonth(m);
   document.getElementById('hIn').textContent = money(c.income);
-  document.getElementById('hOut').textContent = money(c.soldCost + c.expense - c.purchase);
+  document.getElementById('hOut').textContent = money(c.expense);
   document.getElementById('hPf').textContent = money(c.profit);
   document.getElementById('hPf').style.color = c.profit >= 0 ? '#fde68a' : '#fca5a5';
   document.getElementById('monthBtn').textContent = monthLabel(m);
@@ -770,12 +761,8 @@ function renderToday(){
   let i=0,o=0;
   S.records.forEach(r=>{
     if(ymd(new Date(r.time)) !== td) return;
-    if(r.type==='in'){
-      i+=r.amount;
-      // 卖货成本算进今日支出口径
-      if(r.cost !== undefined && r.cost !== null) o+=r.cost;
-    }
-    else if(r.type==='out' && r.cat!=='purchase') o+=r.amount;
+    if(r.type==='in') i+=r.amount;
+    else if(r.type==='out') o+=r.amount;  // 进货也算支出
     else if(r.type==='refund') i-=r.amount;
   });
   document.getElementById('tdIn').textContent = money(i);
@@ -1182,11 +1169,8 @@ function renderFlow(){
     const recs = groups[d].sort((a,b)=>new Date(b.time)-new Date(a.time));
     let di=0, doo=0;
     recs.forEach(r=>{
-      if(r.type==='in'){
-        di+=r.amount;
-        if(r.cost !== undefined && r.cost !== null) doo+=r.cost;
-      }
-      else if(r.type==='out' && r.cat!=='purchase') doo+=r.amount;
+      if(r.type==='in') di+=r.amount;
+      else if(r.type==='out') doo+=r.amount;  // 进货也算支出
       else if(r.type==='refund') di-=r.amount;
     });
     const dt = new Date(d);
@@ -1347,7 +1331,7 @@ function renderReport(){
       <div class="kpi hl full">
         <div class="n">${m===curM?'本月':'该月'}净赚</div>
         <div class="v">${money(c.profit)}</div>
-        <div class="e">营业额 ${money(c.income)} − 退款 ${money(c.refund)} − 卖货成本 ${money(c.soldCost)} − 其他支出 ${money(c.expense - c.purchase)}</div>
+        <div class="e">营业额 ${money(c.income)} − 退款 ${money(c.refund)} − 支出 ${money(c.expense)}（进货已含）</div>
       </div>
       <div class="kpi">
         <div class="n">营业额</div>
@@ -1459,7 +1443,7 @@ function renderReport(){
         ${[
           ['营业额收入', c.income, 'in'],
           ['退款冲减', -c.refund, 'rf'],
-          ['卖货成本', -c.soldCost, 'out'],
+          ['进货', -(byCat.purchase||0), 'out'],
           ['房租', -(byCat.rent||0), 'out'],
           ['水电', -(byCat.utility||0), 'out'],
           ['人工工资', -(byCat.wage||0), 'out'],
