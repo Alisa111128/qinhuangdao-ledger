@@ -222,6 +222,15 @@ input[type=date]{-webkit-appearance:none;appearance:none}
 .hint.ok{background:rgba(34,197,94,.07);border-left-color:var(--pri)}
 .hint.ok b{color:var(--pri)}
 
+/* 分类备注 */
+.cat-memo{background:var(--card);border:1px solid var(--bd);border-left:3px solid var(--amber);
+  border-radius:11px;padding:11px 13px;margin-bottom:11px}
+.cm-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.cm-t{font-size:12.5px;font-weight:700;color:var(--amber)}
+.cm-edit{background:var(--card2);border:1px solid var(--bd);color:var(--text);
+  padding:4px 10px;border-radius:8px;font-size:11.5px;cursor:pointer;font-weight:600}
+.cm-body{font-size:12.5px;color:var(--text);line-height:1.75;white-space:pre-wrap}
+
 /* 数量选择器 */
 .qty-row{display:flex;align-items:center;gap:9px}
 .qty-btn{width:46px;height:46px;border-radius:11px;border:1.5px solid var(--bd);
@@ -448,6 +457,7 @@ input[type=date]{-webkit-appearance:none;appearance:none}
   <button class="bsec" style="margin-top:0;margin-bottom:11px" onclick="openStocktake()">📋 开始盘点（点着数）</button>
   <div id="stocktakeInfo"></div>
   <div class="filters" id="stockCatFilters"></div>
+  <div id="catMemoBox"></div>
   <div id="stockList"></div>
 </div>
 
@@ -561,6 +571,7 @@ let S = {
   stockFilter: 'own',
   stockCatFilter: 'all',
   stocktakes: [],
+  catMemos: {},
   saleCat: 'single-pos',
   buyCat: 'single-pos',
   outCat: 'other',
@@ -1503,6 +1514,9 @@ function renderStock(){
     b.onclick = ()=>{ S.stockCatFilter = b.dataset.c; save(); renderStock(); };
   });
 
+  // 分类备注（选了具体分类才显示）
+  renderCatMemo(catFilter);
+
   let list = S.stock.slice();
   if(S.stockFilter === 'own') list = list.filter(s=>s.status==='own');
   else if(S.stockFilter === 'sold') list = list.filter(s=>s.status==='sold');
@@ -1579,6 +1593,52 @@ function sellStock(id){
 function doRefundID(id){
   const s = S.stock.find(x=>x.id===id);
   if(s) doRefund(s);
+}
+
+/* 分类备注 */
+function renderCatMemo(catId){
+  const box = document.getElementById('catMemoBox');
+  if(!box) return;
+  if(!catId || catId === 'all'){
+    box.innerHTML = '';
+    return;
+  }
+  const cat = catOf(catId);
+  const memo = (S.catMemos && S.catMemos[catId]) || '';
+  box.innerHTML = `
+    <div class="cat-memo">
+      <div class="cm-head">
+        <span class="cm-t">${cat.icon} ${cat.name} · 备注</span>
+        <button class="cm-edit" onclick="editCatMemo('${catId}')">${memo?'✏️ 修改':'＋ 添加'}</button>
+      </div>
+      <div class="cm-body">${memo ? esc(memo).replace(/\n/g,'<br>') : '<span style="color:#5a6478">还没有备注，点右上角添加。比如记录这类都包括什么</span>'}</div>
+    </div>`;
+}
+
+function editCatMemo(catId){
+  const cat = catOf(catId);
+  const cur = (S.catMemos && S.catMemos[catId]) || '';
+  showModal(cat.icon + ' ' + cat.name + ' · 备注', `
+    <div class="hint">记录这类物品主要指什么，方便以后记账时对照。</div>
+    <div class="fd">
+      <textarea id="mMemo" rows="5" placeholder="例如：
+数据线、电源线
+热敏纸卷 57×50
+钱箱、钱夹
+打印纸、色带">${esc(cur)}</textarea>
+    </div>
+  `, [
+    {t:'取消', cls:'cc'},
+    {t:'保存', cls:'ok', fn:()=>{
+      const v = document.getElementById('mMemo').value.trim();
+      if(!S.catMemos) S.catMemos = {};
+      if(v) S.catMemos[catId] = v;
+      else delete S.catMemos[catId];
+      save();
+      renderStock();
+      toast(v ? '备注已保存' : '备注已清空');
+    }}
+  ]);
 }
 
 function delStock(id){
